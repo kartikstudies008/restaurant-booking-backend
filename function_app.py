@@ -1,6 +1,9 @@
 import json
 import logging
+import os
+import uuid
 import azure.functions as func
+from azure.data.tables import TableServiceClient
 
 app = func.FunctionApp()
 
@@ -30,7 +33,24 @@ def book_table(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json"
         )
 
-    booking = {
+    # 🔐 Get connection string from Azure Environment Variables
+    conn_str = os.environ.get("STORAGE_CONNECTION_STRING")
+
+    if not conn_str:
+        return func.HttpResponse(
+            json.dumps({"error": "Storage connection string not found"}),
+            status_code=500,
+            mimetype="application/json"
+        )
+
+    # 🔗 Connect to Table Storage
+    table_service = TableServiceClient.from_connection_string(conn_str)
+    table_client = table_service.get_table_client("Bookings")
+
+    # 📦 Create booking entity
+    booking_entity = {
+        "PartitionKey": "Booking",
+        "RowKey": str(uuid.uuid4()),
         "name": name,
         "email": email,
         "datetime": datetime,
@@ -38,10 +58,12 @@ def book_table(req: func.HttpRequest) -> func.HttpResponse:
         "message": message
     }
 
+    # 💾 Save to Table Storage
+    table_client.create_entity(entity=booking_entity)
+
     return func.HttpResponse(
         json.dumps({
             "success": True,
-            "booking": booking,
             "message": "Table booked successfully"
         }),
         status_code=200,
