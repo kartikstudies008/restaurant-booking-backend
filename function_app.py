@@ -5,8 +5,10 @@ import uuid
 import azure.functions as func
 from azure.data.tables import TableServiceClient
 
+# Initialize Function App (Python v2 model)
 app = func.FunctionApp()
 
+# HTTP-triggered function
 @app.route(
     route="bookTable",
     methods=["POST"],
@@ -15,21 +17,24 @@ app = func.FunctionApp()
 def book_table(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Book Table API called")
 
+    # Parse JSON body
     try:
         data = req.get_json()
-    except ValueError:
+    except Exception:
         return func.HttpResponse(
             json.dumps({"error": "Invalid JSON"}),
             status_code=400,
             mimetype="application/json"
         )
 
+    # Extract fields
     name = data.get("name")
     email = data.get("email")
     datetime = data.get("datetime")
     people = data.get("people")
     message = data.get("message", "")
 
+    # Validate required fields
     if not name or not email or not datetime or not people:
         return func.HttpResponse(
             json.dumps({"error": "Missing required fields"}),
@@ -37,7 +42,7 @@ def book_table(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json"
         )
 
-    # ✅ Use default Azure storage variable
+    # Get Azure Storage connection string
     conn_str = os.environ.get("AzureWebJobsStorage")
 
     if not conn_str:
@@ -47,21 +52,36 @@ def book_table(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json"
         )
 
-    table_service = TableServiceClient.from_connection_string(conn_str)
-    table_client = table_service.get_table_client("Bookings")
+    try:
+        # Connect to Azure Table Storage
+        table_service = TableServiceClient.from_connection_string(conn_str)
 
-    booking_entity = {
-        "PartitionKey": "Booking",
-        "RowKey": str(uuid.uuid4()),
-        "name": name,
-        "email": email,
-        "datetime": datetime,
-        "people": people,
-        "message": message
-    }
+        # Create table if it does not exist
+        table_client = table_service.create_table_if_not_exists("Bookings")
 
-    table_client.create_entity(entity=booking_entity)
+        # Create booking entity
+        booking_entity = {
+            "PartitionKey": "Booking",
+            "RowKey": str(uuid.uuid4()),
+            "name": name,
+            "email": email,
+            "datetime": datetime,
+            "people": int(people),
+            "message": message
+        }
 
+        # Insert into Table Storage
+        table_client.create_entity(entity=booking_entity)
+
+    except Exception as e:
+        logging.error(str(e))
+        return func.HttpResponse(
+            json.dumps({"error": "Failed to save booking"}),
+            status_code=500,
+            mimetype="application/json"
+        )
+
+    # Success response
     return func.HttpResponse(
         json.dumps({
             "success": True,
