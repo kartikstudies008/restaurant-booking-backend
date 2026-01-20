@@ -7,7 +7,11 @@ from azure.data.tables import TableServiceClient
 
 app = func.FunctionApp()
 
-@app.route(route="bookTable", methods=["POST"])
+@app.route(
+    route="bookTable",
+    methods=["POST"],
+    auth_level=func.AuthLevel.ANONYMOUS
+)
 def book_table(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Book Table API called")
 
@@ -33,8 +37,8 @@ def book_table(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json"
         )
 
-    # 🔐 Get connection string from Azure Environment Variables
-    conn_str = os.environ.get("STORAGE_CONNECTION_STRING")
+    # ✅ Use default Azure storage variable
+    conn_str = os.environ.get("AzureWebJobsStorage")
 
     if not conn_str:
         return func.HttpResponse(
@@ -43,11 +47,9 @@ def book_table(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json"
         )
 
-    # 🔗 Connect to Table Storage
     table_service = TableServiceClient.from_connection_string(conn_str)
     table_client = table_service.get_table_client("Bookings")
 
-    # 📦 Create booking entity
     booking_entity = {
         "PartitionKey": "Booking",
         "RowKey": str(uuid.uuid4()),
@@ -58,7 +60,6 @@ def book_table(req: func.HttpRequest) -> func.HttpResponse:
         "message": message
     }
 
-    # 💾 Save to Table Storage
     table_client.create_entity(entity=booking_entity)
 
     return func.HttpResponse(
