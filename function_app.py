@@ -6,35 +6,35 @@ import azure.functions as func
 from azure.data.tables import TableServiceClient
 
 # Initialize Function App (Python v2 model)
-app = func.FunctionApp()
+app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
-# HTTP-triggered function
-@app.route(
-    route="bookTable",
-    methods=["POST"],
-    auth_level=func.AuthLevel.ANONYMOUS
-)
+# ---------------------------------------------------
+# BOOK TABLE API
+# URL: /api/bookTable
+# METHOD: POST
+# ---------------------------------------------------
+@app.route(route="bookTable", methods=["POST"])
 def book_table(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("Book Table API called")
 
-    # Parse JSON body
+    # 1️⃣ Read JSON body
     try:
         data = req.get_json()
-    except Exception:
+    except ValueError:
         return func.HttpResponse(
             json.dumps({"error": "Invalid JSON"}),
             status_code=400,
             mimetype="application/json"
         )
 
-    # Extract fields
+    # 2️⃣ Extract fields
     name = data.get("name")
     email = data.get("email")
     datetime = data.get("datetime")
     people = data.get("people")
     message = data.get("message", "")
 
-    # Validate required fields
+    # 3️⃣ Validate required fields
     if not name or not email or not datetime or not people:
         return func.HttpResponse(
             json.dumps({"error": "Missing required fields"}),
@@ -42,10 +42,11 @@ def book_table(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json"
         )
 
-    # Get Azure Storage connection string
+    # 4️⃣ Get Azure Storage connection string
     conn_str = os.environ.get("AzureWebJobsStorage")
 
     if not conn_str:
+        logging.error("AzureWebJobsStorage not found")
         return func.HttpResponse(
             json.dumps({"error": "Storage connection string not found"}),
             status_code=500,
@@ -53,13 +54,13 @@ def book_table(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     try:
-        # Connect to Azure Table Storage
+        # 5️⃣ Connect to Table Storage
         table_service = TableServiceClient.from_connection_string(conn_str)
 
-        # Create table if it does not exist
+        # Create table if not exists
         table_client = table_service.create_table_if_not_exists("Bookings")
 
-        # Create booking entity
+        # 6️⃣ Create booking entity
         booking_entity = {
             "PartitionKey": "Booking",
             "RowKey": str(uuid.uuid4()),
@@ -70,18 +71,18 @@ def book_table(req: func.HttpRequest) -> func.HttpResponse:
             "message": message
         }
 
-        # Insert into Table Storage
+        # 7️⃣ Save to Table Storage
         table_client.create_entity(entity=booking_entity)
 
     except Exception as e:
-        logging.error(str(e))
+        logging.error(f"Table Storage Error: {str(e)}")
         return func.HttpResponse(
             json.dumps({"error": "Failed to save booking"}),
             status_code=500,
             mimetype="application/json"
         )
 
-    # Success response
+    # 8️⃣ Success response
     return func.HttpResponse(
         json.dumps({
             "success": True,
